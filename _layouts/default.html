@@ -6,16 +6,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#157878">
     <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" href="{{ '/assets/resources/font-awesome/css/font-awesome.min.css' | relative_url }}">
     <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
   </head>
   <body>
     <section class="page-header">
       <h1 class="project-name">{{ site.title | default: site.github.repository_name }}</h1>
       <h2 class="project-tagline">{{ site.description | default: site.github.project_tagline }}</h2>
-      {% if site.show_downloads %}
-        <a href="{{ site.github.zip_url }}" class="btn">Download .zip</a>
-        <a href="{{ site.github.tar_url }}" class="btn">Download .tar.gz</a>
-      {% endif %}
+      <div>
+        <a type="button" class="navbar-toggle nav-link header" href="http://github.com/bartekkalinka"><i class="fa fa-github"></i></a>
+        <a type="button" class="navbar-toggle nav-link header" href="https://twitter.com/bartkali"><i class="fa fa-twitter"></i></a>
+        <a type="button" class="navbar-toggle nav-link header" href="https://www.linkedin.com/in/bartek-kalinka-14226112b"><i class="fa fa-linkedin-square"></i></a>
+      </div>
     </section>
 
     <section class="main-content">

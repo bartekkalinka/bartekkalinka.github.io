@@ -1,0 +1,9 @@
+a.header {
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 30px;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
