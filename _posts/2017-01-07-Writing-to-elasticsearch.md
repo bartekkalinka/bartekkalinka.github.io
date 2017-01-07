@@ -60,7 +60,7 @@ class ElasticDao extends JsonProtocol {
 }
 ```
 
-It works fine for small examples.  However, for a real-life work log, accumulated over serveral years, with around 1700 *ProjectDay* records, following exception occured:
+It works fine for small examples.  However, for a real-life work log, accumulated over serveral years, with around 2600 *ProjectDay* records, following exception occured:
 
 ```
 EsRejectedExecutionException[rejected execution of 
@@ -110,8 +110,20 @@ What could work then?  Elastic4s has additional module offering reactive streams
 ```
 First, `val source` is defined as a *Source* from in-memory sequence of *ProjectDays*.  Next, thanks to `import com.sksamuel.elastic4s.streams.ReactiveElastic._` and implicit builder with record indexing method, ElasticClient gives us a subscriber to write to.  One of its parameters is *completionFn* closure with `system.terminate` call - without it *importData* would hang after completion.  It's then easy to transform the subscriber into akka-streams *Sink*, combine it with our *Source* and run the stream.
 
-It loads all data successfully, and does it in just few seconds (including parsing, and stream initialization).
+It loads all data successfully, and does it in just few seconds (including parsing, and stream initialization).  Why does it work?  Maybe because of using batches (parameter *batchSize* suggests data is loaded not one record at a time).  Maybe because of backpressure.  I haven't researched it in depth.
 
+There is a simpler solution - using bulk operations on sequence of *index* statements.  It wasn't obvious for me at first, because [elastic4s bulk operations docs](https://github.com/sksamuel/elastic4s/blob/master/guide/bulk.md) doesn't show *bulk* use on Scala *Seq*.  I received a hint from my work colleagues though - thanks!  Here's the code:
 
-[TODO test bulk inserts: bulk(inserts: Seq[IndexDefinition])]
+```scala
+  def importData(dbData: Seq[ProjectDay]): Future[BulkResult] = {
+    client.execute { create index "log"  }
 
+    client.execute {
+      bulk(dbData.map(index into "log" / "days" source _))
+    }
+  }
+```
+
+It loads the data as quickly as stream implementation.
+
+Here's the [full source code of my small application](https://github.com/bartekkalinka/worklogminer)
