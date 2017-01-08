@@ -1,4 +1,4 @@
-# Writing a sequence of documents to Elasticsearch #
+# Writing a Sequence of Documents to Elasticsearch #
 
 I'm writing logs during work.  I keep them in text files, and I've been writing them for many years.  Here's the format:
 
