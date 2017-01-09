@@ -60,7 +60,7 @@ class ElasticDao extends JsonProtocol {
 }
 ```
 
-It works fine for small examples.  However, for a real-life work log, accumulated over serveral years, with around 2600 *ProjectDay* records, following exception occured:
+It works fine for small examples.  However, for a real-life work log, accumulated over several years, with around 2600 *ProjectDay* records, following exception occured:
 
 ```
 EsRejectedExecutionException[rejected execution of 
