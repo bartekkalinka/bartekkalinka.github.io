@@ -1,3 +1,3 @@
 # Akka-streams Source: run it, publish it, then run it again #
 
-blah blah
+I was working on a side project.  It took some text data stream source, ran in through a sliding window, for which wordcounts were calculated, and top n words list would be emitted as output.  I wanted to use akka-streams.  The input source and output display were pluggable: text file or [twitter sample stream](https://dev.twitter.com/streaming/reference/get/statuses/sample) as input, console stdout or websockets with little client as output.  I served the websockets with akka-http.  For twitter stream handling, I chose [HBC](https://github.com/twitter/hbc) (because it handles reconnects etc.), with hbc-twitter4j module for twitter json handling.  It's a java library, leveraging callbacks to handle incoming tweets, so to combine this approach with akka-stream, I used Source.actorRef construct.  It gives you an ActorRef, to which you can send elements, and in this way they enter the stream.
