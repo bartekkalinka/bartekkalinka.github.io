@@ -1,5 +1,7 @@
 # Akka-streams Source: run it, publish it, then run it again #
 
+## Problem 1: obtaining materialized value, and sending stream's blueprint at the same time ##
+
 I was working on a side project.  It took some text data stream source, ran in through a sliding window, for which wordcounts were calculated, and top n words list would be emitted as output.  I wanted to use akka-streams.  The input source and output display were pluggable: text file or [twitter sample stream](https://dev.twitter.com/streaming/reference/get/statuses/sample) as input, console stdout or websockets with little client as output.  I served the websockets with akka-http.  For twitter stream handling, I chose [HBC](https://github.com/twitter/hbc) (because it handles reconnects etc.), with hbc-twitter4j module for twitter json handling.  It's a java library, leveraging callbacks to handle incoming tweets, so to combine this approach with akka-stream, I used Source.actorRef construct.  It gives you an ActorRef, to which you can send elements, and in this way they enter the stream.
 
 In akka-streams the stream is first constructed as a *blueprint*.  That means, when it's put together using Flow API or Graph DSL, it's only a recipe of a stream.  To get any computation done with it, it needs to be run or *materialized*.  Such a blueprint may be materialized many times, each time processing different physical set of data.  Often, during materialization, there are additional objects emitted for different stages of the stream.  These objects are some handlers which allow runtime control of those stages.  In our case, Source.actorRef's *materialized value* is a reference to an actor (ActorRef) for sending messages entering the stream.
@@ -38,3 +40,29 @@ object RunWithPublisher {
   }
 }
 ```
+
+## Problem 2: creating a live source, identical to all websocket clients ##
+
+When passing stream's blueprint to akka-http websockets handler, each connected client has this blueprint executed separately.  It may be illustrated by taking the second source type in my side project: a text file.  Sliding window aggregation that passes through the input file, runs separately for each connected client.  For example after refresh in the browser, it runs from the beginning again.  That's behavior we can't have when using twitter source obviously.  The data cannot be replayed, because it's live.  As it turns out, the solution of first problem (getting materialized value by publishing running source) is the solution for the second problem (having same data transmitted for all stream executions).
+
+At first I was getting strange results.  Two clients running in separate browser windows displayed different wordcounts of top n words from twitter data (I actually tracked top tweeting users).  The reason for such behavior was that the aggregations after Source.publisher were still run separately for each client:
+
+```scala
+//(simplification)
+val (twitterSource, actorRef) = RunWithPublisher.source(Source.actorRef)
+Future(runTwitterClient(actorRef))
+twitterSource.sliding.scan(someAggregation)
+handleWebSocketMessages(Flow.fromSinkAndSource(Sink.ignore, twitterSource))
+```
+
+The solution was to use RunWithPublisher on whole aggregated source.  This time we don't care about materialized value, the important part is running one instance of whole stream for all clients.
+
+```scala
+//(simplification)
+val (twitterSource, actorRef) = RunWithPublisher.source(Source.actorRef)
+Future(runTwitterClient(actorRef))
+val (finalSource, _) = RunWithPublisher.source(twitterSource.sliding.scan(someAggregation))
+handleWebSocketMessages(Flow.fromSinkAndSource(Sink.ignore, finalSource))
+```
+
+After such treatment, each client sees identical data being transmitted.  There was just one last problem - when all clients disconnected (which should be possible), the server crashed with exception: `WebSocket handler failed with Cannot subscribe to shut-down Publisher`.  A workaround for this was adding `finalSource.to(Sink.ignore).run` before passing finalSource independently to websockets handler.  It makes the Publisher alive even after all clients disconnect.
