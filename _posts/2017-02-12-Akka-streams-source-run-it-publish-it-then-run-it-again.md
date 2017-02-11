@@ -1,6 +1,6 @@
 # Akka-streams Source: run it, publish it, then run it again #
 
-I was working on a side project.  It took some text data stream source, ran in through a sliding window, for which wordcounts were calculated, and top n words list would be emitted as output.  I wanted to use akka-streams.  The input source and output display were pluggable: text file or [twitter sample stream](https://dev.twitter.com/streaming/reference/get/statuses/sample) as input, console stdout or websockets with little client as output.  I served the websockets with akka-http.  For twitter stream handling, I chose [HBC](https://github.com/twitter/hbc) (because it handles reconnects etc.), with hbc-twitter4j module for twitter json handling.  It's a java library, leveraging callbacks to handle incoming tweets, so to combine this approach with akka-stream, I used Source.actorRef construct.  It gives you an ActorRef, to which you can send elements, and in this way they enter the stream.
+I was working on a side project.  It took some text data stream source, ran in through a sliding window, for which wordcounts were calculated, and top n words list was emitted as output.  I was using akka-streams.  The input source and output display were pluggable: text file or [twitter sample stream](https://dev.twitter.com/streaming/reference/get/statuses/sample) as input, console stdout or websockets with small client as output.  I served the websockets with akka-http.  For twitter stream handling, I chose [HBC](https://github.com/twitter/hbc) (because it handles reconnects etc.), with hbc-twitter4j module for twitter json handling.  It's a java library, leveraging callbacks to handle incoming tweets, so to combine this approach with akka-stream, I had to use Source.actorRef construct.  It gives you an ActorRef, to which you can send elements, and in this way they enter the stream.
 
 ## Problem 1: obtaining materialized value, and sending stream's blueprint at the same time ##
 
@@ -8,7 +8,7 @@ In akka-streams the stream is first constructed as a *blueprint*.  That means, w
 
 When we use akka-http websockets API, `handleWebSocketMessages` directive takes `Flow[Message, Message, Any]` type parameter.  That means, it takes the blueprint of the stream.  The materialization happens somewhere inside websockets handling library.  Now that's a problem, because we need materialized value of our Source.actorRef and we are not running the stream ourselves.
 
-I found a solution in [following post](http://loicdescotte.github.io/posts/play-akka-streams-twitter/) by Loïc Descotte.  The author had a similar problem when connecting twitter4j callback to `Source.actorRef` used to push data into play framework `EventSource`.  The key piece of code is this:
+I found a solution in [following post](http://loicdescotte.github.io/posts/play-akka-streams-twitter/) by Loïc Descotte.  The author had a similar problem when connecting twitter4j callback to `Source.actorRef` used to push data into Play Framework `EventSource`.  The key piece of code is this:
 
 ```scala
 val (actorRef, publisher) =
@@ -16,7 +16,7 @@ val (actorRef, publisher) =
    .toMat(Sink.publisher)(Keep.both).run()
 ```
 
-Here, we construct a Source.actorRef, directing its elements into Sink.publisher and then running it.  To keep both materialized values of Source and Sink, we have to use `toMat` method, that takes `Keep.both` parameter, to instruct the stream blueprint, to return a pair of materialized values upon materialization.  Then we run it, getting `actorRef: ActorRef` and `publisher: Publisher` values.  The Publisher class comes from reactive streams specification, and it's possible to obtain another instance of Source from it:
+Here, we construct a Source.actorRef, directing its elements into Sink.publisher and then running it.  To keep both materialized values of Source and Sink, we have to use `toMat` method, that takes `Keep.both` parameter, to instruct the stream blueprint, to return a pair of materialized values (from both stages) upon materialization.  Then we run it, getting `actorRef: ActorRef` and `publisher: Publisher` values.  The Publisher class comes from reactive streams specification, and it's possible to obtain another instance of Source from it:
 
 ```scala
 val newSource = Source.fromPublisher(publisher)
@@ -45,7 +45,7 @@ object RunWithPublisher {
 
 When passing stream's blueprint to akka-http websockets handler, each connected client has this blueprint executed separately.  It may be illustrated by taking the second source type in my side project: a text file.  Sliding window aggregation that passes through the input file, runs separately for each connected client.  For example after refresh in the browser, it runs from the beginning again.  That's behavior we can't have when using twitter source obviously.  The data cannot be replayed, because it's live.  As it turns out, the solution of first problem (getting materialized value by publishing running source) is the solution for the second problem (having same data transmitted for all stream executions).
 
-At first I was getting strange results.  Two clients running in separate browser windows displayed different wordcounts of top n words from twitter data (I actually tracked top tweeting users).  The reason for such behavior was that the aggregations after Source.publisher were still run separately for each client:
+At first I was getting strange results.  Two clients running in separate browser windows displayed different wordcounts of top n words from twitter data (I actually tracked top tweeting users).  The reason for such behavior was that the aggregations after RunWihtPublisher.source were still run separately for each client:
 
 ```scala
 //(simplification)
@@ -66,3 +66,5 @@ handleWebSocketMessages(Flow.fromSinkAndSource(Sink.ignore, finalSource))
 ```
 
 After such treatment, each client sees identical data being transmitted.  There was just one last problem - when all clients disconnected (which should be possible), the server crashed with exception: `WebSocket handler failed with Cannot subscribe to shut-down Publisher`.  A workaround for this was adding `finalSource.to(Sink.ignore).run` before passing finalSource independently to websockets handler.  It makes the Publisher alive even after all clients disconnect.
+
+[Sources on github](https://github.com/bartekkalinka/window-wordcount-streams)
