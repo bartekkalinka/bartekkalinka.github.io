@@ -67,4 +67,18 @@ handleWebSocketMessages(Flow.fromSinkAndSource(Sink.ignore, finalSource))
 
 After such treatment, each client sees identical data being transmitted.  There was just one last problem - when all clients disconnected (which should be possible), the server crashed with exception: `WebSocket handler failed with Cannot subscribe to shut-down Publisher`.  A workaround for this was adding `finalSource.to(Sink.ignore).run` before passing finalSource independently to websockets handler.  It makes the Publisher alive even after all clients disconnect.
 
+## Update ##
+As ktoso commented below, there is a simpler way to achieve all of above with Akka API - a `BroadcastHub.sink` method.  We can actually use it instead of `Sink.asPublisher` in `RunWithPublisher` (I changed it to `RunWithHub`):
+
+```scala
+object RunWithHub {
+  def source[A, M](normal: Source[A, M])(implicit fm: Materializer, system: ActorSystem): (Source[A, NotUsed], M) = {
+    val (normalMat, hubSource) = normal.toMat(BroadcastHub.sink(bufferSize = 256))(Keep.both).run
+    (hubSource, normalMat)
+  }
+}
+```
+
+Notice that BroadcastHub.sink materializes to Source, so there's no need to use `Source.fromPublisher` anymore.  Another gain is no need to use additional `finalSource.to(Sink.ignore).run` - the BroadcastHub stays alive even if all clients disconnect.
+
 [Sources on github](https://github.com/bartekkalinka/window-wordcount-streams)
